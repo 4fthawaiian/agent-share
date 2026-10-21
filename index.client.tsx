@@ -52,39 +52,69 @@ export default function contribute(client: PluginClientContext) {
         (globalThis as any).alert("Waiting for authorization...");
         
         while (attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, interval));
-          
-          const pollResult = await ctx.rpc(pollDeviceAuthRpc, { deviceCode: authResult.deviceCode } as PollDeviceAuthInput);
-          
-          if (pollResult.success) {
-            (globalThis as any).alert("GitHub authorization successful! You can now share sessions.");
-            return;
-          }
-          
-          if (pollResult.error === "slow_down") {
+          try {
             await new Promise(resolve => setTimeout(resolve, interval));
-          }
-          
-          if (pollResult.error && pollResult.error !== "pending" && pollResult.error !== "slow_down") {
-            // Device auth failed, offer manual token fallback
-            const tryManual = (globalThis as any).confirm(
-              `Device authorization failed: ${pollResult.error}\n\nTry manual token entry instead?`
-            );
             
-            if (tryManual) {
-              const token = (globalThis as any).prompt(
-                "Paste your GitHub personal access token (with gist scope):\n\nCreate one at https://github.com/settings/tokens/new"
+            const pollResult = await ctx.rpc(pollDeviceAuthRpc, { deviceCode: authResult.deviceCode } as PollDeviceAuthInput);
+            
+            if (pollResult.success) {
+              (globalThis as any).alert("GitHub authorization successful! You can now share sessions.");
+              return;
+            }
+            
+            if (pollResult.error === "slow_down") {
+              await new Promise(resolve => setTimeout(resolve, interval));
+            }
+            
+            if (pollResult.error && pollResult.error !== "pending" && pollResult.error !== "slow_down") {
+              // Device auth failed, offer manual token fallback
+              const tryManual = (globalThis as any).confirm(
+                `Device authorization failed: ${pollResult.error}\n\nTry manual token entry instead?`
               );
               
-              if (!token) {
-                (globalThis as any).alert("Setup cancelled.");
-                return;
+              if (tryManual) {
+                const token = (globalThis as any).prompt(
+                  "Paste your GitHub personal access token (with gist scope):\n\nCreate one at https://github.com/settings/tokens/new"
+                );
+                
+                if (!token) {
+                  (globalThis as any).alert("Setup cancelled.");
+                  return;
+                }
+                
+                const result = await ctx.rpc(setTokenRpc, { token } as SetTokenInput);
+                (globalThis as any).alert(result.message);
               }
-              
-              const result = await ctx.rpc(setTokenRpc, { token } as SetTokenInput);
-              (globalThis as any).alert(result.message);
+              return;
             }
-            return;
+          } catch (pollError) {
+            // If plugin was reloaded or stopped during polling, offer manual token
+            const errorMsg = pollError instanceof Error ? pollError.message : String(pollError);
+            if (errorMsg.includes("closed") || errorMsg.includes("IPC")) {
+              const tryManual = (globalThis as any).confirm(
+                "Plugin was reloaded during authorization. Try manual token entry instead?"
+              );
+              
+              if (tryManual) {
+                const token = (globalThis as any).prompt(
+                  "Paste your GitHub personal access token (with gist scope):\n\nCreate one at https://github.com/settings/tokens/new"
+                );
+                
+                if (!token) {
+                  (globalThis as any).alert("Setup cancelled.");
+                  return;
+                }
+                
+                try {
+                  const result = await ctx.rpc(setTokenRpc, { token } as SetTokenInput);
+                  (globalThis as any).alert(result.message);
+                } catch (tokenError) {
+                  (globalThis as any).alert(`Token setup failed: ${tokenError instanceof Error ? tokenError.message : String(tokenError)}`);
+                }
+              }
+              return;
+            }
+            throw pollError;
           }
           
           attempts++;
