@@ -1,0 +1,30 @@
+{
+  "name": "paseo-chat-share-plugin",
+  "version": "0.1.0",
+  "description": "Paseo plugin to export agent sessions as Markdown",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsc --watch"
+  },
+  "devDependencies": {
+    "@getpaseo/plugin": "*",
+    "@getpaseo/server": "*",
+    "@tanstack/react-query": "^5.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-native": "^0.72.0",
+    "react": "^18.2.0",
+    "react-native": "^0.72.0",
+    "typescript": "^5.2.0",
+    "zod": "^3.23.0"
+  },
+  "peerDependencies": {
+    "@getpaseo/plugin": "*",
+    "react": "^18.2.0",
+    "react-native": "^0.72.0"
+  }
+}
