@@ -165,7 +165,7 @@ async function generateMarkdown(paseo: any, input: ShareSessionInput): Promise<{
   console.log("[chat-share] Fetching timeline for agent:", input.agentId);
   const timeline = await paseo.agents.ref(input.agentId).timeline.refetch({
     direction: input.direction ?? "tail",
-    limit: input.limit,
+    limit: input.limit ?? 200, // Default limit to prevent timeouts on large timelines
     projection: input.projection ?? "projected",
   });
 
