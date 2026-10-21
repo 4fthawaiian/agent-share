@@ -2,7 +2,7 @@
   "id": "agent-share",
   "name": "Agent Share",
   "description": "Export agent sessions as Markdown via public GitHub Gist using GitHub Device Authorization Flow",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "requirements": {
     "paseo": ">=0.11.0"
   }
