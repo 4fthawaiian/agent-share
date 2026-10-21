@@ -1,5 +1,12 @@
 import { z } from "zod";
+import { webcrypto } from "node:crypto";
 import type { PluginServerContext, PluginHandlerContext } from "@getpaseo/plugin/server";
+
+// Some Paseo plugin host environments lack globalThis.crypto (e.g. Windows
+// bundled Node without WebCrypto). fetch/undici requires it.
+if (typeof (globalThis as any).crypto === "undefined") {
+  (globalThis as any).crypto = webcrypto;
+}
 import { 
   shareSessionRpc, 
   startDeviceAuthRpc, 
