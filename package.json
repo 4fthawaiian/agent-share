@@ -1,5 +1,5 @@
 {
-  "name": "@4fthawaiian/agent-share",
+  "name": "paseo-agent-share",
   "version": "0.1.0",
   "description": "Paseo plugin to export agent sessions as public GitHub Gists",
   "type": "module",
