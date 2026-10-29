@@ -1,4 +1,26 @@
 import { z } from "zod";
+import { defineSettings, settingsRpc } from "@getpaseo/plugin";
+
+export const agentShareSettings = defineSettings({
+  id: "agent-share",
+  scope: "host",
+  version: 1,
+  schema: z.object({
+    githubToken: z.string().nullable().default(null),
+  }),
+});
+
+export const agentShareSettingsRpc = settingsRpc(agentShareSettings.id);
+
+export const shareResultKind = "agent-share-result";
+export const shareResultSchema = z.object({
+  status: z.enum(["shared", "failed"]),
+  url: z.string().optional(),
+  title: z.string().nullable().optional(),
+  error: z.string().optional(),
+  exportedAt: z.string(),
+});
+export type ShareResultData = z.infer<typeof shareResultSchema>;
 
 export const shareSessionRpc = {
   name: "share",

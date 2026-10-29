@@ -7,12 +7,14 @@ import type { PluginServerContext, PluginHandlerContext } from "@getpaseo/plugin
 if (typeof (globalThis as any).crypto === "undefined") {
   (globalThis as any).crypto = webcrypto;
 }
-import { 
-  shareSessionRpc, 
-  startDeviceAuthRpc, 
+import {
+  agentShareSettings,
+  shareSessionRpc,
+  startDeviceAuthRpc,
   pollDeviceAuthRpc,
   setTokenRpc,
-  type ShareSessionInput, 
+  shareResultKind,
+  type ShareSessionInput,
   type ShareSessionOutput,
   type StartDeviceAuthInput,
   type StartDeviceAuthOutput,
@@ -47,6 +49,16 @@ function timelineItemToMarkdown(item: any): string {
     }
     case "error": {
       return `> **Error (${provider})** *${time}*\n>\n> ${timelineItem.message}\n`;
+    }
+    case "plugin": {
+      if (timelineItem.kind === shareResultKind) {
+        const data = timelineItem.data as { status?: string; url?: string; error?: string };
+        if (data.status === "shared" && data.url) {
+          return `**Session shared:** [GitHub Gist](${data.url}) *${time}*\n`;
+        }
+        return `> **Share failed** *${time}*\n>\n> ${data.error ?? "unknown error"}\n`;
+      }
+      return `> **Plugin item (${timelineItem.pluginId}/${timelineItem.kind})** *${time}*\n`;
     }
     case "compaction": {
       return `> **Compaction (${provider})** *${time}* — ${timelineItem.status}${timelineItem.trigger ? ` (${timelineItem.trigger})` : ""}${timelineItem.preTokens ? `, ${timelineItem.preTokens} tokens` : ""}\n`;
@@ -240,7 +252,7 @@ async function createGist(markdown: string, title: string, token: string): Promi
   return gist.html_url;
 }
 
-// In-memory token storage
+// Cached token — backed by host-scoped plugin settings so it survives reloads.
 let githubToken: string | null = null;
 
 async function handleShareSession(input: ShareSessionInput, context: PluginHandlerContext): Promise<ShareSessionOutput> {
@@ -294,7 +306,8 @@ async function handleStartDeviceAuth(input: StartDeviceAuthInput, context: Plugi
   }
 
   const data = await response.json();
-  console.log("[chat-share] Device code:", data.device_code, "User code:", data.user_code);
+  // Never log device_code/user_code — they are sensitive while authorization is pending.
+  console.log("[chat-share] Device authorization started, expires in", data.expires_in, "s");
   
   return {
     deviceCode: data.device_code,
@@ -312,7 +325,7 @@ async function handlePollDeviceAuth(input: PollDeviceAuthInput, context: PluginH
     throw new Error("GitHub client_id not configured.");
   }
   
-  console.log("[chat-share] Polling device authorization for:", input.deviceCode);
+  console.log("[chat-share] Polling device authorization");
   
   const response = await fetch("https://github.com/login/oauth/access_token", {
     method: "POST",
@@ -360,6 +373,20 @@ async function handleSetToken(input: SetTokenInput, context: PluginHandlerContex
 }
 
 export default function contribute(server: PluginServerContext) {
+  const settings = server.registerSettings(agentShareSettings);
+  const applySettings = (state: Awaited<ReturnType<typeof settings.read>>) => {
+    if (state.status === "ready") {
+      githubToken = state.values.githubToken ?? null;
+      console.log("[chat-share] GitHub token", githubToken ? "loaded from settings" : "not configured");
+    }
+  };
+  void settings.read().then(applySettings).catch((error) => {
+    console.warn("[chat-share] Failed to read settings:", error);
+  });
+  settings.subscribe((state) => {
+    applySettings(state);
+  });
+
   server.handle(shareSessionRpc, handleShareSession);
   server.handle(startDeviceAuthRpc, handleStartDeviceAuth);
   server.handle(pollDeviceAuthRpc, handlePollDeviceAuth);
