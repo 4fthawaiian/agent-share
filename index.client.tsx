@@ -7,38 +7,9 @@ import type {
 import { copyText } from "@getpaseo/plugin/client/react-native";
 import { AuthScreen } from "./client/auth-screen";
 import { ShareResultCard } from "./client/share-result-card";
-import {
-  shareResultKind,
-  shareResultSchema,
-  shareSessionRpc,
-  type ShareResultData,
-} from "./shared/share-session";
+import { shareResultKind, shareResultSchema, shareSessionRpc } from "./shared/share-session";
 
 const SETTINGS_SCREEN_ID = "agent-share-settings";
-
-function newItemId(): string {
-  const cryptoObj = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
-  if (cryptoObj?.randomUUID) return cryptoObj.randomUUID();
-  return `share-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-async function appendShareResult(
-  ctx: PluginCommandCapabilities,
-  agentId: string,
-  data: ShareResultData,
-): Promise<void> {
-  try {
-    await ctx.paseo.agents.ref(agentId).timeline.append({
-      type: "plugin",
-      id: newItemId(),
-      kind: shareResultKind,
-      version: 1,
-      data,
-    });
-  } catch (error) {
-    console.warn("[agent-share] Failed to append timeline item:", error);
-  }
-}
 
 async function shareAgent(ctx: PluginCommandCapabilities, agentId: string): Promise<void> {
   try {
@@ -46,25 +17,14 @@ async function shareAgent(ctx: PluginCommandCapabilities, agentId: string): Prom
     await copyText(result.url).catch((error) => {
       console.warn("[agent-share] Clipboard copy failed:", error);
     });
-    await appendShareResult(ctx, agentId, {
-      status: "shared",
-      url: result.url,
-      title: result.title,
-      exportedAt: new Date().toISOString(),
-    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[agent-share] Share failed:", error);
-    await appendShareResult(ctx, agentId, {
-      status: "failed",
-      error: message,
-      exportedAt: new Date().toISOString(),
-    });
     if (/token|setup|authoriz/i.test(message)) {
       try {
         ctx.openSettings(SETTINGS_SCREEN_ID);
       } catch {
-        // Settings surface unavailable on this host — the timeline card still reports the failure.
+        // Settings surface unavailable on this host — the server still appends a failure card.
       }
     }
   }

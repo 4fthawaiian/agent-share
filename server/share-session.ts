@@ -14,6 +14,7 @@ import {
   pollDeviceAuthRpc,
   setTokenRpc,
   shareResultKind,
+  type ShareResultData,
   type ShareSessionInput,
   type ShareSessionOutput,
   type StartDeviceAuthInput,
@@ -255,28 +256,74 @@ async function createGist(markdown: string, title: string, token: string): Promi
 // Cached token — backed by host-scoped plugin settings so it survives reloads.
 let githubToken: string | null = null;
 
+function newShareItemId(): string {
+  const cryptoObj = globalThis.crypto as { randomUUID?: () => string } | undefined;
+  if (cryptoObj?.randomUUID) return cryptoObj.randomUUID();
+  return `share-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function appendShareResult(
+  context: PluginHandlerContext,
+  agentId: string,
+  data: ShareResultData,
+): Promise<void> {
+  try {
+    await context.paseo.agents.ref(agentId).timeline.append({
+      type: "plugin",
+      id: newShareItemId(),
+      kind: shareResultKind,
+      version: 1,
+      data,
+    });
+  } catch (error) {
+    console.warn("[chat-share] Failed to append timeline item:", error);
+  }
+}
+
 async function handleShareSession(input: ShareSessionInput, context: PluginHandlerContext): Promise<ShareSessionOutput> {
   console.log("[chat-share] Handling share-session for agent:", input.agentId);
-  const { markdown, timeline } = await generateMarkdown(context.paseo, input);
 
   if (!githubToken) {
-    throw new Error("GitHub token not configured. Run 'Setup GitHub Gist sharing' from Command Center first.");
+    const message = "GitHub token not configured. Run 'Setup GitHub Gist sharing' first.";
+    await appendShareResult(context, input.agentId, {
+      status: "failed",
+      error: message,
+      exportedAt: new Date().toISOString(),
+    });
+    throw new Error(message);
   }
 
-  const title = timeline.agent?.title ?? `Agent ${input.agentId}`;
-  const gistUrl = await createGist(markdown, title, githubToken);
-  console.log("[chat-share] Published to:", gistUrl);
+  try {
+    const { markdown, timeline } = await generateMarkdown(context.paseo, input);
+    const title = timeline.agent?.title ?? `Agent ${input.agentId}`;
+    const gistUrl = await createGist(markdown, title, githubToken);
+    console.log("[chat-share] Published to:", gistUrl);
 
-  return {
-    url: gistUrl,
-    agentId: input.agentId,
-    title: timeline.agent?.title ?? null,
-    epoch: timeline.epoch,
-    direction: timeline.direction,
-    projection: timeline.projection,
-    hasOlder: timeline.hasOlder,
-    hasNewer: timeline.hasNewer,
-  };
+    await appendShareResult(context, input.agentId, {
+      status: "shared",
+      url: gistUrl,
+      title: timeline.agent?.title ?? null,
+      exportedAt: new Date().toISOString(),
+    });
+
+    return {
+      url: gistUrl,
+      agentId: input.agentId,
+      title: timeline.agent?.title ?? null,
+      epoch: timeline.epoch,
+      direction: timeline.direction,
+      projection: timeline.projection,
+      hasOlder: timeline.hasOlder,
+      hasNewer: timeline.hasNewer,
+    };
+  } catch (error) {
+    await appendShareResult(context, input.agentId, {
+      status: "failed",
+      error: error instanceof Error ? error.message : String(error),
+      exportedAt: new Date().toISOString(),
+    });
+    throw error;
+  }
 }
 
 async function handleStartDeviceAuth(input: StartDeviceAuthInput, context: PluginHandlerContext): Promise<StartDeviceAuthOutput> {
